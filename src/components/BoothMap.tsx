@@ -1,6 +1,13 @@
 "use client";
 
 import { useId, useRef, useState, useMemo, useEffect, useCallback } from "react";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+} from "@/components/ui/drawer";
 import rawMapData from "@/data/booth-map-data.json";
 
 export interface BoothMember {
@@ -48,17 +55,30 @@ const boothCategories = boothCategoriesRaw as Record<string, string>;
 // 품목 카테고리 태그
 const CATEGORY_TAGS = [
   { label: "전체 품목", key: "ALL" },
-  { label: "🍶 전통주", key: "전통주" },
-  { label: "🥃 증류주/고량주", key: "증류주/고량주" },
-  { label: "🍷 수입 와인", key: "수입 와인" },
-  { label: "🍇 한국와인/과실주", key: "한국와인/과실주" },
-  { label: "🍺 맥주", key: "맥주" },
-  { label: "🍶 사케", key: "사케" },
-  { label: "🍾 리큐르/종합", key: "리큐르/종합" },
-  { label: "🍖 안주/식품", key: "안주/식품" },
-  { label: "🛋️ 편의 시설", key: "편의 시설" },
-  { label: "📦 기타", key: "기타" },
+  { label: "전통주", key: "전통주" },
+  { label: "증류주/고량주", key: "증류주/고량주" },
+  { label: "수입 와인", key: "수입 와인" },
+  { label: "한국와인/과실주", key: "한국와인/과실주" },
+  { label: "맥주", key: "맥주" },
+  { label: "사케", key: "사케" },
+  { label: "리큐르/종합", key: "리큐르/종합" },
+  { label: "안주/식품", key: "안주/식품" },
+  { label: "기타", key: "기타" },
 ];
+
+// 🎨 카테고리별 고유 색상
+const CATEGORY_COLOR: Record<string, { fill: string; stroke: string; dot: string }> = {
+  "전통주":       { fill: "#FDE68A", stroke: "#D97706", dot: "#B45309" },
+  "증류주/고량주": { fill: "#FED7AA", stroke: "#EA580C", dot: "#C2410C" },
+  "수입 와인":    { fill: "#FECDD3", stroke: "#E11D48", dot: "#BE123C" },
+  "한국와인/과실주":{ fill: "#F0ABFC", stroke: "#A21CAF", dot: "#86198F" },
+  "맥주":        { fill: "#BAE6FD", stroke: "#0284C7", dot: "#0369A1" },
+  "사케":        { fill: "#BBF7D0", stroke: "#16A34A", dot: "#15803D" },
+  "리큐르/종합":  { fill: "#DDD6FE", stroke: "#7C3AED", dot: "#6D28D9" },
+  "안주/식품":   { fill: "#FEF08A", stroke: "#CA8A04", dot: "#A16207" },
+  "편의 시설":   { fill: "#E2E8F0", stroke: "#64748B", dot: "#475569" },
+  "기타":        { fill: "#F5F5F4", stroke: "#A8A29E", dot: "#78716C" },
+};
 type Props = {
   onBoothSelect?: (booth: Booth) => void;
 };
@@ -208,7 +228,7 @@ const matches = (booth: Booth, query: string) => {
 // 상단 필터용 탭 목록
 const ZONE_TAGS = [
   { label: "전체 구역", key: "ALL", dot: "#862572" },
-  { label: "☕ 편의시설", key: "FACILITY", dot: "#64748B" },
+  { label: "편의시설", key: "FACILITY", dot: "#64748B" },
   { label: "A (편의)", key: "A", dot: ZONE_CONFIG.A.dotColor },
   { label: "B", key: "B", dot: ZONE_CONFIG.B.dotColor },
   { label: "C", key: "C", dot: ZONE_CONFIG.C.dotColor },
@@ -232,7 +252,53 @@ export default function BoothMap({ onBoothSelect }: Props) {
   const [selected, setSelected] = useState<Booth | null>(null);
   const [hoveredBooth, setHoveredBooth] = useState<Booth | null>(null);
   const [copied, setCopied] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // ⭐ 즐겨찾기 (Set of booth IDs) — localStorage 연동
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem("booth-favorites");
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  // ✅ 방문 완료 (Set of booth IDs) — localStorage 연동
+  const [visited, setVisited] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem("booth-visited");
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  // localStorage 동기화
+  useEffect(() => {
+    localStorage.setItem("booth-favorites", JSON.stringify([...favorites]));
+  }, [favorites]);
+
+  useEffect(() => {
+    localStorage.setItem("booth-visited", JSON.stringify([...visited]));
+  }, [visited]);
+
+  const toggleFavorite = useCallback((id: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleVisited = useCallback((id: string) => {
+    setVisited((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<SVGSVGElement>(null);
@@ -351,15 +417,6 @@ export default function BoothMap({ onBoothSelect }: Props) {
               <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
               총 {mapData.booths.length}개 부스
             </span>
-
-            {/* 모바일 검색 토글 버튼 */}
-            <button
-              type="button"
-              onClick={() => setIsSearchOpen(!isSearchOpen)}
-              className="flex items-center gap-1 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-xs hover:bg-white/30 transition sm:hidden"
-            >
-              <span>🔍</span> {isSearchOpen ? "지도보기" : "검색"}
-            </button>
           </div>
         </div>
       </header>
@@ -374,11 +431,7 @@ export default function BoothMap({ onBoothSelect }: Props) {
                 id={`${uid}-search`}
                 type="search"
                 value={query}
-                onFocus={() => setIsSearchOpen(true)}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  if (e.target.value) setIsSearchOpen(true);
-                }}
+                onChange={(e) => setQuery(e.target.value)}
                 placeholder="부스 번호(예: H-06, E-13) 또는 업체명(와인, 양조장, 막걸리) 검색"
                 className="w-full rounded-lg border border-stone-300 bg-stone-50 pl-9 pr-8 py-2 text-xs sm:text-sm outline-none focus:bg-white focus:border-fuchsia-700 focus:ring-2 focus:ring-fuchsia-700/20 transition placeholder:text-stone-400"
               />
@@ -436,6 +489,7 @@ export default function BoothMap({ onBoothSelect }: Props) {
                 type="button"
                 onClick={() => {
                   setSelectedZone(z.key);
+                  setSelectedCategory("ALL"); // 구역 선택 시 품목 필터 초기화
                   if (z.key !== "ALL") {
                     const targetPrefix = z.key === "FACILITY" ? "A" : z.key;
                     const firstBooth = mapData.booths.find((b) => b.id.startsWith(targetPrefix));
@@ -472,20 +526,33 @@ export default function BoothMap({ onBoothSelect }: Props) {
           {/* 품목 카테고리 필터 스크롤 */}
           <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             <span className="text-[11px] font-semibold text-stone-400 shrink-0 mr-0.5">품목:</span>
-            {CATEGORY_TAGS.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => setSelectedCategory(c.key)}
-                className={`shrink-0 px-2.5 py-1 text-[11px] sm:text-xs rounded-full border transition active:scale-95 ${
-                  selectedCategory === c.key
-                    ? "bg-[#862572] text-white border-[#862572] font-bold shadow-2xs"
-                    : "bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100"
-                }`}
-              >
-                {c.label}
-              </button>
-            ))}
+            {CATEGORY_TAGS.map((c) => {
+              const catDot = CATEGORY_COLOR[c.key]?.dot;
+              const isActive = selectedCategory === c.key;
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory(c.key);
+                    setSelectedZone("ALL"); // 품목 선택 시 구역 필터 초기화
+                  }}
+                  className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-[11px] sm:text-xs rounded-full border transition active:scale-95 ${
+                    isActive
+                      ? "bg-[#862572] text-white border-[#862572] font-bold shadow-2xs"
+                      : "bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100"
+                  }`}
+                >
+                  {catDot && (
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: isActive ? "#fff" : catDot }}
+                    />
+                  )}
+                  {c.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -573,8 +640,15 @@ export default function BoothMap({ onBoothSelect }: Props) {
                   let strokeColor = zoneCfg.stroke;
                   let strokeWidth = 1.8;
 
+                  // 카테고리 필터가 활성화된 경우 카테고리 색상 우선 사용
+                  const catColor = CATEGORY_COLOR[boothCategory] ?? CATEGORY_COLOR["기타"];
+                  const isCategoryFiltered = selectedCategory !== "ALL";
+                  // 카테고리 필터 활성 시 각 부스는 자신의 카테고리 색으로 표시 (전체 다 보임)
+                  const activeFill = isCategoryFiltered ? catColor.fill : zoneCfg.fill;
+                  const activeStroke = isCategoryFiltered ? catColor.stroke : zoneCfg.dotColor;
+
                   if (isDefaultView) {
-                    // 1. 일반 화면: 배경은 깔끔하게, 같은 구역끼리 테두리 색상으로 묶어줌
+                    // 1. 기본 화면: 구역 테두리 색 구분
                     fillColor = "#FFFFFF";
                     fillOpacity = 0.5;
                     strokeColor = zoneCfg.dotColor;
@@ -586,11 +660,11 @@ export default function BoothMap({ onBoothSelect }: Props) {
                       strokeWidth = 3.0;
                     }
                   } else {
-                    // 2. 필터링 상태: 조건에 맞는 대상만 화사하게 채우고, 나머지는 딤(dim)
+                    // 2. 필터링 상태
                     if (isTarget) {
-                      fillColor = zoneCfg.fill;
+                      fillColor = activeFill;
                       fillOpacity = 0.92;
-                      strokeColor = zoneCfg.dotColor;
+                      strokeColor = activeStroke;
                       strokeWidth = 3.2;
                     } else {
                       fillColor = "#F5F5F4";
@@ -621,6 +695,9 @@ export default function BoothMap({ onBoothSelect }: Props) {
                     strokeWidth = 5.5;
                   }
 
+                  const isFavorite = favorites.has(booth.id);
+                  const isVisited = visited.has(booth.id);
+
                   const centerX = booth.x + booth.width / 2;
                   const centerY = booth.y + booth.height / 2;
 
@@ -642,7 +719,6 @@ export default function BoothMap({ onBoothSelect }: Props) {
                         onClick={(e) => {
                           e.stopPropagation();
                           select(booth);
-                          setIsSearchOpen(false);
                         }}
                         onMouseEnter={() => setHoveredBooth(booth)}
                         onMouseLeave={() => setHoveredBooth(null)}
@@ -677,6 +753,34 @@ export default function BoothMap({ onBoothSelect }: Props) {
                       >
                         {booth.id}
                       </text>
+
+                      {/* ⭐ 즐겨찾기 별 아이콘 (우상단) */}
+                      {isFavorite && (
+                        <text
+                          x={booth.x + booth.width - 4}
+                          y={booth.y + 4}
+                          textAnchor="end"
+                          dominantBaseline="hanging"
+                          fontSize={Math.min(booth.width, booth.height) * 0.35}
+                          pointerEvents="none"
+                        >
+                          ⭐
+                        </text>
+                      )}
+
+                      {/* ✅ 방문 완료 체크 아이콘 (좌상단) */}
+                      {isVisited && (
+                        <text
+                          x={booth.x + 4}
+                          y={booth.y + 4}
+                          textAnchor="start"
+                          dominantBaseline="hanging"
+                          fontSize={Math.min(booth.width, booth.height) * 0.35}
+                          pointerEvents="none"
+                        >
+                          ✅
+                        </text>
+                      )}
                     </g>
                   );
                 })}
@@ -720,6 +824,24 @@ export default function BoothMap({ onBoothSelect }: Props) {
         {/* 💻 PC 전용 우측 사이드바 (xl 이상에서 항상 표시) */}
         <aside className="hidden xl:flex w-84 flex-col border-l border-stone-200 bg-white p-4 overflow-y-auto shrink-0 shadow-xs">
           <div className="space-y-4">
+            {/* 즐겨찾기/방문 요약 */}
+            <div className="flex gap-2 text-xs">
+              <div className="flex-1 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 flex items-center gap-2">
+                <span className="text-base">⭐</span>
+                <div>
+                  <div className="font-bold text-amber-800">{favorites.size}개</div>
+                  <div className="text-amber-600 text-[10px]">즐겨찾기</div>
+                </div>
+              </div>
+              <div className="flex-1 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 flex items-center gap-2">
+                <span className="text-base">✅</span>
+                <div>
+                  <div className="font-bold text-emerald-800">{visited.size}개</div>
+                  <div className="text-emerald-600 text-[10px]">방문 완료</div>
+                </div>
+              </div>
+            </div>
+
             {/* 선택 부스 정보 카드 */}
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
               <div className="flex items-center justify-between pb-2 border-b border-stone-200">
@@ -779,6 +901,32 @@ export default function BoothMap({ onBoothSelect }: Props) {
                       className="flex-1 py-1.5 text-xs font-bold rounded-lg bg-[#862572] text-white hover:bg-[#711e60] transition"
                     >
                       🎯 화면 맞춤
+                    </button>
+                  </div>
+
+                  {/* ⭐ 즐겨찾기 / ✅ 방문 토글 버튼 */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(selected.id)}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition ${
+                        favorites.has(selected.id)
+                          ? "bg-amber-50 border-amber-400 text-amber-700 hover:bg-amber-100"
+                          : "bg-white border-stone-300 text-stone-600 hover:bg-stone-100"
+                      }`}
+                    >
+                      {favorites.has(selected.id) ? "⭐ 즐겨찾기 해제" : "☆ 즐겨찾기"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleVisited(selected.id)}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition ${
+                        visited.has(selected.id)
+                          ? "bg-emerald-50 border-emerald-400 text-emerald-700 hover:bg-emerald-100"
+                          : "bg-white border-stone-300 text-stone-600 hover:bg-stone-100"
+                      }`}
+                    >
+                      {visited.has(selected.id) ? "✅ 방문 완료" : "☐ 방문 표시"}
                     </button>
                   </div>
 
@@ -843,136 +991,100 @@ export default function BoothMap({ onBoothSelect }: Props) {
           </div>
         </aside>
 
-        {/* 📱 모바일 검색 결과 오버레이 */}
-        {isSearchOpen && (
-          <div className="absolute inset-0 z-30 bg-stone-900/40 backdrop-blur-xs flex flex-col justify-end xl:hidden">
-            <div className="bg-white rounded-t-2xl max-h-[80vh] flex flex-col p-4 shadow-2xl animate-slide-up">
-              <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-                <span className="text-sm font-bold text-stone-800">
-                  {query.trim() ? `검색 결과 (${results.length}건)` : "부스 검색"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setIsSearchOpen(false)}
-                  className="w-7 h-7 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto py-2 space-y-1.5">
-                {results.length > 0 ? (
-                  results.map((b) => {
-                    const cfg = getZoneConfig(b.id);
-                    return (
-                      <button
-                        key={b.id}
-                        type="button"
-                        onClick={() => {
-                          select(b, true);
-                          setIsSearchOpen(false);
-                        }}
-                        className="w-full text-left p-3 rounded-xl border border-stone-200 bg-stone-50 active:bg-fuchsia-100 transition flex items-center justify-between"
-                      >
-                        <div className="min-w-0 pr-2">
-                          <span className={`inline-block font-extrabold text-xs px-2 py-0.5 rounded ${cfg.badgeBg} ${cfg.badgeText}`}>
-                            {b.id}
+        {/* 📱 모바일 부스 상세 — 하단 플로팅 패널 (딤 없음, 지도 그대로 보임) */}
+        {/* 📱 모바일 부스 상세 — shadcn Drawer */}
+        <Drawer open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+          <DrawerContent className="xl:hidden px-4 pb-6">
+            {selected && (() => {
+              const cfg = getZoneConfig(selected.id);
+              const bCat = boothCategories[selected.id] || "기타";
+              return (
+                <>
+                  <DrawerHeader className="text-left px-0 pt-2 pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                          <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-extrabold ${cfg.badgeBg} ${cfg.badgeText}`}>
+                            {selected.id}
                           </span>
-                          <p className="mt-1 text-sm font-bold text-stone-900 break-keep truncate">
-                            {b.name}
-                          </p>
+                          <span className="text-[11px] font-semibold text-stone-500">{cfg.name}</span>
+                          <span className="text-[10px] font-bold text-fuchsia-700 bg-fuchsia-50 border border-fuchsia-200 px-1.5 py-0.5 rounded-full">
+                            {bCat}
+                          </span>
                         </div>
-                        <span className="text-stone-400 text-xs shrink-0">이동 ›</span>
+                        <DrawerTitle className="text-base font-bold text-stone-900 leading-snug break-keep">
+                          {selected.name}
+                        </DrawerTitle>
+                        <DrawerDescription className="sr-only">부스 상세 정보</DrawerDescription>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelected(null)}
+                        className="rounded-full bg-stone-100 p-1.5 text-stone-400 hover:text-stone-700 shrink-0"
+                        aria-label="닫기"
+                      >
+                        ✕
                       </button>
-                    );
-                  })
-                ) : (
-                  <div className="py-12 text-center text-xs text-stone-400">
-                    {query.trim()
-                      ? "일치하는 부스가 없습니다."
-                      : "상단 검색창에 부스 번호나 업체명을 입력하세요."}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+                    </div>
+                  </DrawerHeader>
 
-        {/* 📱 모바일 전용 슬라이드업 바텀 시트 */}
-        {selected && !isSearchOpen && (
-          <div className="absolute inset-x-0 bottom-0 z-20 xl:hidden">
-            <div className="mx-2 mb-2 rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl animate-slide-up">
-              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300"></div>
-
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  {(() => {
-                    const cfg = getZoneConfig(selected.id);
-                    return (
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-block rounded-md px-2.5 py-1 text-sm font-extrabold ${cfg.badgeBg} ${cfg.badgeText}`}
-                        >
-                          {selected.id}
-                        </span>
-                        <span className="text-xs font-semibold text-stone-500">
-                          {cfg.name}
-                        </span>
+                  {/* 공동 참가업체 */}
+                  {selected.members && selected.members.length > 0 && (
+                    <div className="mb-3 max-h-28 overflow-y-auto rounded-lg bg-stone-50 p-2 text-xs border border-stone-200">
+                      <p className="font-bold text-stone-600 mb-1">공동 참가업체 ({selected.members.length}개)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                        {selected.members.map((m) => (
+                          <div key={m.id} className="flex gap-1.5 text-stone-700 bg-white p-1.5 rounded">
+                            <span className="font-bold text-fuchsia-800">{m.id}</span>
+                            <span className="truncate">{m.name}</span>
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })()}
-                  <h2 className="mt-1.5 text-base font-bold text-stone-900 leading-snug break-keep">
-                    {selected.name}
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelected(null)}
-                  className="rounded-full bg-stone-100 p-1.5 text-stone-400 hover:text-stone-600"
-                  aria-label="닫기"
-                >
-                  ✕
-                </button>
-              </div>
+                    </div>
+                  )}
 
-              {selected.members && selected.members.length > 0 && (
-                <div className="mt-2.5 max-h-36 overflow-y-auto rounded-lg bg-stone-50 p-2.5 text-xs border border-stone-200">
-                  <p className="font-bold text-stone-600 mb-1">
-                    공동 참가업체 ({selected.members.length}개)
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                    {selected.members.map((m) => (
-                      <div key={m.id} className="flex gap-1.5 text-stone-700 bg-white p-1.5 rounded">
-                        <span className="font-bold text-fuchsia-800">{m.id}</span>
-                        <span className="truncate">{m.name}</span>
-                      </div>
-                    ))}
+                  {/* 즐겨찾기 / 방문 */}
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(selected.id)}
+                      className={`flex-1 rounded-xl border py-2.5 text-sm font-bold transition active:scale-95 ${
+                        favorites.has(selected.id)
+                          ? "bg-amber-50 border-amber-400 text-amber-700"
+                          : "bg-stone-50 border-stone-300 text-stone-600"
+                      }`}
+                    >
+                      {favorites.has(selected.id) ? "⭐ 즐겨찾기 해제" : "☆ 즐겨찾기"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleVisited(selected.id)}
+                      className={`flex-1 rounded-xl border py-2.5 text-sm font-bold transition active:scale-95 ${
+                        visited.has(selected.id)
+                          ? "bg-emerald-50 border-emerald-400 text-emerald-700"
+                          : "bg-stone-50 border-stone-300 text-stone-600"
+                      }`}
+                    >
+                      {visited.has(selected.id) ? "✅ 방문 완료" : "☐ 방문 표시"}
+                    </button>
                   </div>
-                </div>
-              )}
 
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => copyBoothInfo(selected)}
-                  className="flex-1 rounded-xl border border-stone-300 bg-stone-50 py-2.5 text-xs font-semibold text-stone-700 active:bg-stone-200 transition"
-                >
-                  {copied ? "✓ 복사 완료!" : "📋 부스 정보 복사"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (zoom < 1.75) setZoom(1.75);
-                    setTimeout(() => select(selected, true), 100);
-                  }}
-                  className="flex-1 rounded-xl bg-[#862572] py-2.5 text-xs font-bold text-white shadow-xs active:bg-[#711e60] transition"
-                >
-                  🎯 화면 중앙 맞춤
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+                  {/* 지도 이동 */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (zoom < 1.75) setZoom(1.75);
+                      setTimeout(() => select(selected, true), 100);
+                    }}
+                    className="w-full rounded-xl bg-[#862572] py-2.5 text-xs font-bold text-white active:bg-[#711e60] transition"
+                  >
+                    🎯 지도에서 부스 찾기
+                  </button>
+                </>
+              );
+            })()}
+          </DrawerContent>
+        </Drawer>
       </div>
     </div>
   );

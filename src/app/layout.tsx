@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -34,7 +38,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className="h-full">
+    <html lang="ko" className={cn("h-full", "font-sans", geist.variable)}>
       <body className="h-full bg-stone-100 text-stone-900 antialiased selection:bg-fuchsia-200 selection:text-fuchsia-900">
         {children}
       </body>
