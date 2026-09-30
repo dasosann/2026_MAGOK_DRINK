@@ -305,6 +305,7 @@ export default function BoothMap({ onBoothSelect }: Props) {
 
   // 드래그(Pan) 핸들러 상태
   const [isPanning, setIsPanning] = useState(false);
+  const draggedRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number }>({
     x: 0,
     y: 0,
@@ -367,6 +368,7 @@ export default function BoothMap({ onBoothSelect }: Props) {
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).tagName === "rect") return;
     if (!containerRef.current) return;
+    draggedRef.current = false;
     setIsPanning(true);
     panStartRef.current = {
       x: e.clientX,
@@ -378,6 +380,7 @@ export default function BoothMap({ onBoothSelect }: Props) {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isPanning || !containerRef.current) return;
+    draggedRef.current = true;
     e.preventDefault();
     const dx = e.clientX - panStartRef.current.x;
     const dy = e.clientY - panStartRef.current.y;
@@ -387,6 +390,13 @@ export default function BoothMap({ onBoothSelect }: Props) {
 
   const handleMouseUp = () => {
     setIsPanning(false);
+  };
+
+  const handleContainerClick = (e: React.MouseEvent) => {
+    if (!draggedRef.current) {
+      setSelected(null);
+    }
+    draggedRef.current = false;
   };
 
   useEffect(() => {
@@ -565,6 +575,7 @@ export default function BoothMap({ onBoothSelect }: Props) {
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onClick={handleContainerClick}
           className={`h-full w-full overflow-auto bg-stone-200/50 p-2 sm:p-4 touch-pan-x touch-pan-y ${
             isPanning ? "cursor-grabbing" : "cursor-grab"
           }`}
@@ -992,7 +1003,25 @@ export default function BoothMap({ onBoothSelect }: Props) {
         </aside>
 
         {/* 📱 모바일 부스 상세 — shadcn Drawer */}
-        <Drawer modal={false} open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        <Drawer 
+          modal={false} 
+          open={!!selected} 
+          onOpenChange={(open, details: any) => { 
+            if (!open) {
+              if (details?.reason === "outsidePress") {
+                const target = details.event?.target as Node;
+                if (containerRef.current?.contains(target)) {
+                  details?.cancel?.();
+                  if (details?.event && typeof details.event.preventDefault === 'function') {
+                    // prevent default just in case
+                  }
+                  return;
+                }
+              }
+              setSelected(null); 
+            }
+          }}
+        >
           <DrawerContent className="xl:hidden px-4 pb-6 pointer-events-auto shadow-2xl">
             {selected && (() => {
               const cfg = getZoneConfig(selected.id);
