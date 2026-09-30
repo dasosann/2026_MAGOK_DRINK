@@ -991,10 +991,9 @@ export default function BoothMap({ onBoothSelect }: Props) {
           </div>
         </aside>
 
-        {/* 📱 모바일 부스 상세 — 하단 플로팅 패널 (딤 없음, 지도 그대로 보임) */}
         {/* 📱 모바일 부스 상세 — shadcn Drawer */}
-        <Drawer open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
-          <DrawerContent className="xl:hidden px-4 pb-6">
+        <Drawer modal={false} open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+          <DrawerContent className="xl:hidden px-4 pb-6 pointer-events-auto shadow-2xl">
             {selected && (() => {
               const cfg = getZoneConfig(selected.id);
               const bCat = boothCategories[selected.id] || "기타";
