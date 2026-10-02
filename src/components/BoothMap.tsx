@@ -8,6 +8,13 @@ import {
   DrawerTitle,
   DrawerDescription,
 } from "@/components/ui/drawer";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import rawMapData from "@/data/booth-map-data.json";
 
 export interface BoothMember {
@@ -275,6 +282,23 @@ export default function BoothMap({ onBoothSelect }: Props) {
     }
   });
 
+  // 📝 메모 (부스별 메모 목록) — localStorage 연동
+  interface Memo {
+    text: string;
+    createdAt: string;
+  }
+  const [memos, setMemos] = useState<Record<string, Memo[]>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = localStorage.getItem("booth-memos");
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [memoInput, setMemoInput] = useState("");
+  const [showMemoList, setShowMemoList] = useState(false);
+
   // localStorage 동기화
   useEffect(() => {
     localStorage.setItem("booth-favorites", JSON.stringify([...favorites]));
@@ -283,6 +307,40 @@ export default function BoothMap({ onBoothSelect }: Props) {
   useEffect(() => {
     localStorage.setItem("booth-visited", JSON.stringify([...visited]));
   }, [visited]);
+
+  useEffect(() => {
+    localStorage.setItem("booth-memos", JSON.stringify(memos));
+  }, [memos]);
+
+  // 부스 선택 변경 시 메모 입력 초기화
+  useEffect(() => {
+    setMemoInput("");
+  }, [selected]);
+
+  const saveMemo = useCallback((boothId: string, text: string) => {
+    if (!text.trim()) return;
+    const newMemo: Memo = { text: text.trim(), createdAt: new Date().toLocaleString("ko-KR") };
+    setMemos((prev) => ({
+      ...prev,
+      [boothId]: [...(prev[boothId] || []), newMemo],
+    }));
+    setMemoInput("");
+  }, []);
+
+  const deleteMemo = useCallback((boothId: string, index: number) => {
+    setMemos((prev) => {
+      const list = [...(prev[boothId] || [])];
+      list.splice(index, 1);
+      if (list.length === 0) {
+        const { [boothId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [boothId]: list };
+    });
+  }, []);
+
+  // 메모가 있는 부스 ID 목록
+  const memoBoothIds = useMemo(() => Object.keys(memos).filter((id) => memos[id].length > 0), [memos]);
 
   const toggleFavorite = useCallback((id: string) => {
     setFavorites((prev) => {
@@ -708,6 +766,7 @@ export default function BoothMap({ onBoothSelect }: Props) {
 
                   const isFavorite = favorites.has(booth.id);
                   const isVisited = visited.has(booth.id);
+                  const hasMemo = Boolean(memos[booth.id]?.length);
 
                   const centerX = booth.x + booth.width / 2;
                   const centerY = booth.y + booth.height / 2;
@@ -792,6 +851,20 @@ export default function BoothMap({ onBoothSelect }: Props) {
                           ✅
                         </text>
                       )}
+
+                      {/* 📝 메모 있음 표시 (우하단) */}
+                      {hasMemo && (
+                        <text
+                          x={booth.x + booth.width - 4}
+                          y={booth.y + booth.height - 4}
+                          textAnchor="end"
+                          dominantBaseline="auto"
+                          fontSize={Math.min(booth.width, booth.height) * 0.3}
+                          pointerEvents="none"
+                        >
+                          📝
+                        </text>
+                      )}
                     </g>
                   );
                 })}
@@ -831,6 +904,21 @@ export default function BoothMap({ onBoothSelect }: Props) {
             맞춤
           </button>
         </div>
+
+        {/* 📝 메모 모아보기 플로팅 버튼 (좌측 하단) */}
+        <button
+          type="button"
+          onClick={() => setShowMemoList(true)}
+          className="absolute left-4 bottom-20 sm:bottom-6 z-20 flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl shadow-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-fuchsia-50 hover:border-fuchsia-300 hover:text-fuchsia-800 active:scale-95 transition"
+        >
+          <span className="text-base">📝</span>
+          메모 모아보기
+          {memoBoothIds.length > 0 && (
+            <span className="ml-0.5 bg-fuchsia-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+              {memoBoothIds.length}
+            </span>
+          )}
+        </button>
 
         {/* 💻 PC 전용 우측 사이드바 (xl 이상에서 항상 표시) */}
         <aside className="hidden xl:flex w-84 flex-col border-l border-stone-200 bg-white p-4 overflow-y-auto shrink-0 shadow-xs">
@@ -956,6 +1044,58 @@ export default function BoothMap({ onBoothSelect }: Props) {
                       </ul>
                     </div>
                   )}
+
+                  {/* 📝 메모 입력 (PC 사이드바) */}
+                  <div className="rounded-lg border border-stone-200 bg-stone-50 p-2.5">
+                    <p className="text-xs font-bold text-stone-600 mb-1.5">📝 기억에 남는 술 · 가격 메모</p>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={memoInput}
+                        onChange={(e) => setMemoInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && memoInput.trim()) {
+                            saveMemo(selected.id, memoInput);
+                          }
+                        }}
+                        placeholder="예: 복순도가 12,000원 맛있었음!"
+                        className="flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-fuchsia-700 focus:ring-2 focus:ring-fuchsia-700/20 transition placeholder:text-stone-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveMemo(selected.id, memoInput)}
+                        disabled={!memoInput.trim()}
+                        className="shrink-0 rounded-md bg-[#862572] px-2.5 py-1.5 text-xs font-bold text-white hover:bg-[#711e60] transition disabled:opacity-40"
+                      >
+                        저장
+                      </button>
+                    </div>
+
+                    {/* 저장된 메모 목록 */}
+                    {memos[selected.id] && memos[selected.id].length > 0 && (
+                      <ul className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                        {memos[selected.id].map((memo, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-start justify-between gap-1.5 rounded-md bg-white border border-stone-200 px-2 py-1.5 text-xs"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-stone-800 break-keep leading-relaxed">{memo.text}</p>
+                              <p className="text-[10px] text-stone-400 mt-0.5">{memo.createdAt}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => deleteMemo(selected.id, idx)}
+                              className="shrink-0 text-stone-300 hover:text-red-500 text-xs p-0.5 transition"
+                              aria-label="메모 삭제"
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="py-6 text-center text-xs text-stone-400">
@@ -1097,22 +1237,150 @@ export default function BoothMap({ onBoothSelect }: Props) {
                     </button>
                   </div>
 
-                  {/* 지도 이동 */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (zoom < 1.75) setZoom(1.75);
-                      setTimeout(() => select(selected, true), 100);
-                    }}
-                    className="w-full rounded-xl bg-[#862572] py-2.5 text-xs font-bold text-white active:bg-[#711e60] transition"
-                  >
-                    🎯 지도에서 부스 찾기
-                  </button>
+                  {/* 📝 메모 입력 */}
+                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-xs font-bold text-stone-600 mb-2">📝 기억에 남는 술 · 가격 메모</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={memoInput}
+                        onChange={(e) => setMemoInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && memoInput.trim()) {
+                            saveMemo(selected.id, memoInput);
+                          }
+                        }}
+                        placeholder="예: 복순도가 12,000원 맛있었음!"
+                        className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs outline-none focus:border-fuchsia-700 focus:ring-2 focus:ring-fuchsia-700/20 transition placeholder:text-stone-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveMemo(selected.id, memoInput)}
+                        disabled={!memoInput.trim()}
+                        className="shrink-0 rounded-lg bg-[#862572] px-3 py-2 text-xs font-bold text-white active:bg-[#711e60] transition disabled:opacity-40"
+                      >
+                        저장
+                      </button>
+                    </div>
+
+                    {/* 저장된 메모 목록 */}
+                    {memos[selected.id] && memos[selected.id].length > 0 && (
+                      <ul className="mt-2.5 space-y-1.5 max-h-32 overflow-y-auto">
+                        {memos[selected.id].map((memo, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-start justify-between gap-2 rounded-lg bg-white border border-stone-200 px-2.5 py-2 text-xs"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-stone-800 break-keep leading-relaxed">{memo.text}</p>
+                              <p className="text-[10px] text-stone-400 mt-0.5">{memo.createdAt}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => deleteMemo(selected.id, idx)}
+                              className="shrink-0 text-stone-300 hover:text-red-500 text-xs p-0.5 transition"
+                              aria-label="메모 삭제"
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </>
               );
             })()}
           </DrawerContent>
         </Drawer>
+
+        {/* 📝 메모 모아보기 Dialog */}
+        <Dialog open={showMemoList} onOpenChange={setShowMemoList}>
+          <DialogContent className="sm:max-w-md max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                📝 내 메모 모아보기
+                {memoBoothIds.length > 0 && (
+                  <span className="text-xs font-bold text-fuchsia-700 bg-fuchsia-50 border border-fuchsia-200 px-2 py-0.5 rounded-full">
+                    {memoBoothIds.length}개 부스
+                  </span>
+                )}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-stone-500">
+                기억에 남는 술, 가격 등을 기록한 부스 목록입니다.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto -mx-4 px-4 space-y-3 pb-2">
+              {memoBoothIds.length === 0 ? (
+                <div className="py-10 text-center text-sm text-stone-400">
+                  <p className="text-2xl mb-2">📋</p>
+                  <p>아직 메모한 부스가 없습니다.</p>
+                  <p className="text-xs mt-1">부스를 선택하고 메모를 남겨보세요!</p>
+                </div>
+              ) : (
+                memoBoothIds.map((boothId) => {
+                  const booth = mapData.booths.find((b) => b.id === boothId);
+                  const cfg = getZoneConfig(boothId);
+                  const bCat = boothCategories[boothId] || "기타";
+                  return (
+                    <div
+                      key={boothId}
+                      className="rounded-xl border border-stone-200 bg-stone-50 overflow-hidden"
+                    >
+                      {/* 부스 헤더 */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (booth) {
+                            setShowMemoList(false);
+                            if (zoom < 1.5) setZoom(1.5);
+                            setTimeout(() => select(booth, true), 150);
+                          }
+                        }}
+                        className="w-full text-left px-3 py-2.5 flex items-center gap-2 hover:bg-stone-100 transition"
+                      >
+                        <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-extrabold ${cfg.badgeBg} ${cfg.badgeText}`}>
+                          {boothId}
+                        </span>
+                        <span className="text-xs font-bold text-stone-800 truncate flex-1">
+                          {booth?.name || "알 수 없는 부스"}
+                        </span>
+                        <span className="text-[10px] font-bold text-fuchsia-700 bg-fuchsia-50 border border-fuchsia-200 px-1.5 py-0.5 rounded-full shrink-0">
+                          {bCat}
+                        </span>
+                        <span className="text-stone-400 text-xs shrink-0">→</span>
+                      </button>
+
+                      {/* 메모 목록 */}
+                      <ul className="border-t border-stone-200 divide-y divide-stone-100">
+                        {memos[boothId].map((memo, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-start justify-between gap-2 px-3 py-2 bg-white text-xs"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-stone-800 break-keep leading-relaxed">{memo.text}</p>
+                              <p className="text-[10px] text-stone-400 mt-0.5">{memo.createdAt}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => deleteMemo(boothId, idx)}
+                              className="shrink-0 text-stone-300 hover:text-red-500 text-xs p-0.5 transition"
+                              aria-label="메모 삭제"
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
